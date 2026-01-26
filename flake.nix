@@ -11,7 +11,6 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Python with required packages
         pythonEnv = pkgs.python3.withPackages (ps: with ps; [
           trafilatura
           readability-lxml
@@ -20,49 +19,58 @@
           cssselect
         ]);
 
-        # Main url2org script wrapped with dependencies
-        url2org = pkgs.writeScriptBin "url2org" ''
-          #!${pythonEnv}/bin/python3
-          ${builtins.readFile ./url2org.py}
-        '';
-
-        # Wofi capture script with all dependencies
-        wofi-cap-url2org = pkgs.writeShellApplication {
-          name = "wofi-cap-url2org";
-          runtimeInputs = with pkgs; [
-            wofi
-            fd
-            findutils
-            wl-clipboard
-            libnotify
-            coreutils
-            gnused
-            gawk
-          ];
-          text = ''
-            # shellcheck disable=SC2016
-            URL2ORG_BIN="${url2org}/bin/url2org"
-            export URL2ORG_BIN
-
-            ${builtins.readFile ./wofi-cap-url2org.sh}
+        url2org = pkgs.stdenv.mkDerivation {
+          pname = "url2org";
+          version = "1.0.0";
+          src = ./.;
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          installPhase = ''
+            mkdir -p $out/bin
+            cp url2org $out/bin/url2org
+            chmod +x $out/bin/url2org
+            substituteInPlace $out/bin/url2org \
+              --replace-quiet '#!/usr/bin/env python3' '#!${pythonEnv}/bin/python3'
+            wrapProgram $out/bin/url2org \
+              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.pandoc pkgs.wget ]}
           '';
         };
 
-        # Protocol handler script
-        url2org-proto = pkgs.writeShellApplication {
-          name = "url2org-proto";
-          runtimeInputs = with pkgs; [ python3 ];
-          text = ''
-            WOFI_CAP="${wofi-cap-url2org}/bin/wofi-cap-url2org"
-
-            ${builtins.readFile ./url2org-proto.sh}
+        wofi-cap-url2org = pkgs.stdenv.mkDerivation {
+          pname = "wofi-cap-url2org";
+          version = "1.0.0";
+          src = ./.;
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          installPhase = ''
+            mkdir -p $out/bin
+            cp wofi-cap-url2org $out/bin/wofi-cap-url2org
+            chmod +x $out/bin/wofi-cap-url2org
+            wrapProgram $out/bin/wofi-cap-url2org \
+              --set URL2ORG_BIN "${url2org}/bin/url2org" \
+              --prefix PATH : ${pkgs.lib.makeBinPath [
+                pkgs.wofi pkgs.fd pkgs.findutils pkgs.wl-clipboard
+                pkgs.libnotify pkgs.coreutils pkgs.gnused pkgs.gawk pkgs.gnugrep
+              ]}
           '';
         };
 
-        # Desktop entry for protocol handler
+        url2org-proto = pkgs.stdenv.mkDerivation {
+          pname = "url2org-proto";
+          version = "1.0.0";
+          src = ./.;
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          installPhase = ''
+            mkdir -p $out/bin
+            cp url2org-proto $out/bin/url2org-proto
+            chmod +x $out/bin/url2org-proto
+            wrapProgram $out/bin/url2org-proto \
+              --set WOFI_CAP "${wofi-cap-url2org}/bin/wofi-cap-url2org" \
+              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.python3 pkgs.gnused ]}
+          '';
+        };
+
         desktopItem = pkgs.makeDesktopItem {
           name = "url2org";
-          desktopName = "URL → Org Capture (protocol)";
+          desktopName = "URL to Org Capture";
           exec = "${url2org-proto}/bin/url2org-proto %u";
           type = "Application";
           noDisplay = true;
@@ -78,16 +86,8 @@
           };
         };
 
-        # Development shell
         devShells.default = pkgs.mkShell {
-          packages = [
-            pythonEnv
-            pkgs.pandoc
-            pkgs.wofi
-            pkgs.fd
-            pkgs.wl-clipboard
-            pkgs.libnotify
-          ];
+          packages = [ pythonEnv pkgs.pandoc pkgs.wofi pkgs.fd pkgs.wl-clipboard pkgs.libnotify ];
         };
       }
     );

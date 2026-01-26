@@ -4,7 +4,7 @@ set -euo pipefail
 # ---------- Instellingen ----------
 WOFI_BIN="${WOFI_BIN:-wofi}"
 FD_BIN="${FD_BIN:-fd}"                       # op Ubuntu vaak 'fdfind'
-URL2ORG_BIN="${URL2ORG_BIN:-$HOME/System/scripts/web/url2org}"
+URL2ORG_BIN="${URL2ORG_BIN:-url2org}"
 
 ROOTS=("$HOME/Documents/Aantekeningen/Org/web" "$HOME/Documents" "$HOME")
 HIDE_DOTDIRS=true

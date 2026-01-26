@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=URL → Org Capture (protocol)
-Exec=/home/jajpater/System/scripts/web/url2org-proto %u
-Type=Application
-NoDisplay=true
-MimeType=x-scheme-handler/url2org;
