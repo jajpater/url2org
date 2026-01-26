@@ -28,8 +28,8 @@
             mkdir -p $out/bin
             cp url2org $out/bin/url2org
             chmod +x $out/bin/url2org
-            substituteInPlace $out/bin/url2org \
-              --replace-quiet '#!/usr/bin/env python3' '#!${pythonEnv}/bin/python3'
+            PATH=${pythonEnv}/bin:$PATH
+            patchShebangs $out/bin/url2org
             wrapProgram $out/bin/url2org \
               --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.pandoc pkgs.wget ]}
           '';
