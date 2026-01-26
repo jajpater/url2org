@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Voorbeeld argv[1]: url2org://capture?url=https%3A%2F%2Fexample.com%2F...
+RAW="${1:-}"
+# haal ?url=… eruit
+ENC="$(printf '%s' "$RAW" | sed -n 's#.*[?&]url=\([^ ]*\)$#\1#p')"
+[ -n "${ENC:-}" ] || { echo "Geen url= param"; exit 2; }
+URL="$(python3 -c 'import sys,urllib.parse as u;print(u.unquote(sys.argv[1]))' "$ENC")"
+exec "$HOME/System/scripts/web/wofi-cap-url2org" "$URL"
+
