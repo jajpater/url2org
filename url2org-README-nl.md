@@ -82,12 +82,12 @@ URL → directory → opties → formaat → capture.
 
 ### Configuratie
 
-Bovenin het script:
+Bij Nix-installatie worden de paden automatisch geconfigureerd. De variabelen in het script:
 
 ```bash
 ROOTS=("$HOME/Documents/org" "$HOME/Documents")
 HIDE_DOTDIRS=true
-URL2ORG_BIN="$HOME/.local/bin/url2org"
+URL2ORG_BIN="${URL2ORG_BIN:-url2org}"  # Automatisch via PATH
 ```
 
 ### Gebruik
@@ -122,10 +122,12 @@ Verbindt het custom schema `url2org://capture?...` met je lokale scripts.
 
 ### Desktop-registratie
 
+Bij installatie via Nix flake wordt de desktop entry automatisch geregistreerd. Voor handmatige setup:
+
 ```ini
 [Desktop Entry]
-Name=URL → Org Capture
-Exec=/home/jajpater/.local/bin/url2org-proto %u
+Name=URL to Org Capture
+Exec=url2org-proto %u
 Type=Application
 NoDisplay=true
 MimeType=x-scheme-handler/url2org;
@@ -157,16 +159,18 @@ javascript:location.href='url2org://capture?url='+encodeURIComponent(location.hr
 
 ## ⚙️ 9. Afhankelijkheden
 
+Bij installatie via Nix flake worden alle afhankelijkheden automatisch gebundeld:
+
 | Tool / Lib                                          | Doel                           |
 |-----------------------------------------------------|--------------------------------|
 | **Python ≥3.10**                                    | runtime                        |
 | **trafilatura**, **readability-lxml**, **requests** | extractie                      |
 | **pandoc**                                          | conversie naar andere formaten |
 | **wget**                                            | snapshot-download              |
-| **wofi** **                                         | fuzzy directory-picker         |
-| **wl-paste** / **xclip**                            | clipboard lezen                |
+| **wofi**                                            | fuzzy directory-picker         |
+| **wl-paste**                                        | clipboard lezen                |
 | **notify-send**                                     | desktopnotificaties            |
-| **fd** of **fdfind**                                | snelle directorylijst          |
+| **fd**                                              | snelle directorylijst          |
 
 ---
 
@@ -185,11 +189,12 @@ javascript:location.href='url2org://capture?url='+encodeURIComponent(location.hr
 
 | Variabele        | Betekenis                                | Default                |
 |------------------|------------------------------------------|------------------------|
-| `DEFAULT_DIR`    | standaardmap voor `url2org`              | `~/Documenten/org`     |
+| `DEFAULT_DIR`    | standaardmap voor `url2org`              | `~/Documents/org`      |
 | `DEFAULT_FORMAT` | uitvoerformaat (org/md/typst/docx)       | `org`                  |
 | `DEFAULT_FLAGS`  | extra argumenten (bijv. `--readability`) | *(leeg)*               |
-| `DEFAULT_ROOT`   | startdirectory voor fuzzy picker         | `~/Documenten/org`     |
-| `URL2ORG_BIN`    | pad naar hoofdscript                     | `~/.local/bin/url2org` |
+| `ROOTS`          | startdirectories voor fuzzy picker       | `~/Documents/...`      |
+| `URL2ORG_BIN`    | pad naar hoofdscript                     | `url2org` (via PATH)   |
+| `WOFI_CAP`       | pad naar wofi capture script             | `wofi-cap-url2org`     |
 | `HIDE_DOTDIRS`   | verberg verborgen directories            | `true`                 |
 
 ---
@@ -259,11 +264,7 @@ Hieronder vind je de meest voorkomende problemen, oorzaken en oplossingen.
 **Oorzaak:** `xclip` probeert te werken in een Wayland-sessie zonder XWayland context.
 **Oplossing:**
 
-* Installeer en gebruik `wl-clipboard` in plaats van `xclip`:
-
-  ```bash
-  sudo apt install wl-clipboard
-  ```
+* Bij Nix-installatie is `wl-clipboard` automatisch gebundeld.
 * Controleer of `$WAYLAND_DISPLAY` is ingesteld (`echo $WAYLAND_DISPLAY`).
 
 
@@ -271,46 +272,29 @@ Hieronder vind je de meest voorkomende problemen, oorzaken en oplossingen.
 
 ### ⚡ B. **Python of Trafilatura fouten**
 
-#### 1. “ModuleNotFoundError: No module named 'trafilatura'”
+> **Let op:** Bij installatie via Nix flake worden alle Python-dependencies automatisch gebundeld. Deze problemen treden alleen op bij handmatige installatie.
 
-**Oorzaak:** De Python virtualenv van `url2org` mist de juiste modules.
-**Oplossing:**
+#### 1. "ModuleNotFoundError: No module named 'trafilatura'"
+
+**Oorzaak:** Python mist de juiste modules.
+**Oplossing (Nix):** Herinstalleer via flake - dependencies worden automatisch meegeleverd.
+**Oplossing (handmatig):**
 
 ```bash
-/home/jajpater/.pyenv/versions/url2org/bin/python -m pip install \
-  trafilatura readability-lxml requests
+pip install trafilatura readability-lxml requests
 ```
 
-#### 2. “lxml downgrade / dependency conflict”
+#### 2. Pandoc converteert niet of geeft lege output
 
-**Symptoom:** bij installatie wordt `lxml` gedowngraded en andere pakketten breken.
-**Oplossing:**
-
-* Gebruik een **afzonderlijke venv** voor `url2org`.
-* Herinstalleer met:
-
-  ```bash
-  python -m venv ~/.local/venv/url2org
-  source ~/.local/venv/url2org/bin/activate
-  pip install trafilatura readability-lxml requests pandocfilters
-  ```
-
-#### 3. Pandoc converteert niet of geeft lege output
-
-**Oorzaak:** Pandoc niet geïnstalleerd of verkeerde versie.
+**Oorzaak:** Pandoc niet beschikbaar.
 **Controle:**
 
 ```bash
 pandoc -v
 ```
 
-**Oplossing:**
-
-```bash
-sudo apt install pandoc
-```
-
-of installeer via conda/gh-release voor de nieuwste versie.
+**Oplossing (Nix):** Pandoc wordt automatisch gebundeld door de flake.
+**Oplossing (handmatig):** Installeer pandoc via je package manager.
 
 ---
 
