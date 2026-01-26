@@ -1,4 +1,4 @@
-#!/home/jajpater/.pyenv/versions/url2org/bin/python
+#!/usr/bin/env python3
 """
 url2org — robuuste versie (Trafilatura standaard, Readability optioneel)
 
