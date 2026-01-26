@@ -1,7 +1,7 @@
 # `url2org` – Capture webpagina’s naar Org-mode, Markdown, Typst, LaTeX of DOCX
 
 Een lichtgewicht, volledig lokale toolchain om met één klik vanuit Chrome of Brave webpagina’s te **converteren naar goed opgemaakte notities** — zonder muis, zonder browser-extensies en zonder netwerkservers.
-Ontworpen voor een **mouseless**, **Wayland-vriendelijke** workflow met **fzf-, Wofi- of Zenity-launchers**.
+Ontworpen voor een **mouseless**, **Wayland-vriendelijke** workflow met **Wofi-launcher**.
 
 ---
 
@@ -157,17 +157,16 @@ javascript:location.href='url2org://capture?url='+encodeURIComponent(location.hr
 
 ## ⚙️ 9. Afhankelijkheden
 
-| Tool / Lib                                          | Doel                           | Installatie                                         |
-| --------------------------------------------------- | ------------------------------ | --------------------------------------------------- |
-| **Python ≥3.10**                                    | runtime                        | —                                                   |
-| **trafilatura**, **readability-lxml**, **requests** | extractie                      | `pip install trafilatura readability-lxml requests` |
-| **pandoc**                                          | conversie naar andere formaten | `sudo apt install pandoc`                           |
-| **wget**                                            | snapshot-download              | `sudo apt install wget`                             |
-| **zenity**                                          | lichte GUI-vensters            | `sudo apt install zenity`                           |
-| **tofi** / **fuzzel** / **rofi-wayland**            | fuzzy directory-picker         | `sudo apt install tofi`                             |
-| **wl-paste** / **xclip**                            | clipboard lezen                | `sudo apt install wl-clipboard`                     |
-| **notify-send**                                     | desktopnotificaties            | `sudo apt install libnotify-bin`                    |
-| **fd** of **fdfind**                                | snelle directorylijst          | `sudo apt install fd-find`                          |
+| Tool / Lib                                          | Doel                           |
+|-----------------------------------------------------|--------------------------------|
+| **Python ≥3.10**                                    | runtime                        |
+| **trafilatura**, **readability-lxml**, **requests** | extractie                      |
+| **pandoc**                                          | conversie naar andere formaten |
+| **wget**                                            | snapshot-download              |
+| **wofi** **                                         | fuzzy directory-picker         |
+| **wl-paste** / **xclip**                            | clipboard lezen                |
+| **notify-send**                                     | desktopnotificaties            |
+| **fd** of **fdfind**                                | snelle directorylijst          |
 
 ---
 
@@ -185,11 +184,11 @@ javascript:location.href='url2org://capture?url='+encodeURIComponent(location.hr
 ## ⚙️ 11. Variabelen en defaults
 
 | Variabele        | Betekenis                                | Default                |
-| ---------------- | ---------------------------------------- | ---------------------- |
-| `DEFAULT_DIR`    | standaardmap voor `url2org-quick`        | `~/Documents/org`      |
+|------------------|------------------------------------------|------------------------|
+| `DEFAULT_DIR`    | standaardmap voor `url2org`              | `~/Documenten/org`     |
 | `DEFAULT_FORMAT` | uitvoerformaat (org/md/typst/docx)       | `org`                  |
 | `DEFAULT_FLAGS`  | extra argumenten (bijv. `--readability`) | *(leeg)*               |
-| `DEFAULT_ROOT`   | startdirectory voor fuzzy picker         | `~/Documents/org`      |
+| `DEFAULT_ROOT`   | startdirectory voor fuzzy picker         | `~/Documenten/org`     |
 | `URL2ORG_BIN`    | pad naar hoofdscript                     | `~/.local/bin/url2org` |
 | `HIDE_DOTDIRS`   | verberg verborgen directories            | `true`                 |
 
@@ -419,9 +418,7 @@ url2org "https://example.com" --readability --format org --debug
 Als dit succesvol een `.org`-bestand maakt, werkt de hele keten (Python, Pandoc, permissies, netwerk).
 
 ---
----
 
 ### Auteur & licentie
 
-Samenstelling: **J.A.J. Pater**, 2025
 MIT-licentie — vrij te gebruiken en aan te passen.
