@@ -83,13 +83,21 @@ This opens a wofi menu where you can:
 3. Toggle options (--open, --snapshot, --readability)
 4. Select output format(s)
 
-### Browser Integration
+### Browser Integration (Bookmarklets)
 
-Register the protocol handler, then use bookmarklets or extensions to call:
+Create a bookmark with this JavaScript as the URL:
 
+```javascript
+javascript:location.href='url2org://capture?url='+encodeURIComponent(location.href)
 ```
-url2org://capture?url=https%3A%2F%2Fexample.com
-```
+
+This calls the protocol handler which opens the interactive wofi menu.
+
+**Setup:**
+1. Create a new bookmark in Chrome/Brave
+2. Name it (e.g., "Capture to Org")
+3. Paste the JavaScript code as the URL
+4. Click the bookmark on any page to capture it
 
 ## Dependencies (bundled)
 
@@ -105,6 +113,13 @@ The flake automatically includes:
 ```bash
 nix develop  # Enter dev shell with all dependencies
 ```
+
+## Documentation
+
+For detailed documentation including troubleshooting, configuration options, and workflow examples:
+
+- **English**: [url2org-README-en.md](url2org-README-en.md)
+- **Nederlands**: [url2org-README-nl.md](url2org-README-nl.md)
 
 ## License
 
