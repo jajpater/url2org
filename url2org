@@ -106,7 +106,8 @@ def requests_get(url: str) -> str:
         r.raise_for_status()
         r.encoding = r.apparent_encoding or r.encoding
         return r.text
-    except Exception:
+    except Exception as exc:
+        sys.stderr.write(f"[url2org] Ophalen van {url} mislukt: {exc}\n")
         return ""
 
 
@@ -130,6 +131,8 @@ def pandoc_to_org_from_html(html: str) -> str:
             return res.stdout
     txt = re.sub(r"<[^>]+>", "", html)
     txt = re.sub(r"\s+", " ", txt).strip()
+    if not txt:
+        return ""
     return "#+begin_quote\n" + txt + "\n#+end_quote\n"
 
 
@@ -235,25 +238,37 @@ def md_to_org(md: str) -> str:
 
 
 def softbreak_fix_org(org_text: str) -> str:
-    """Schoon Org-tekst: behoud structuur, herstel eenvoudige Pandoc-artifacts."""
-    text = org_text
+    """Voeg alleen gewone alinearegels samen; laat Org-structuur intact."""
+    out, paragraph = [], []
+    block_depth = 0
+    in_drawer = False
 
-    # 0) Pandoc harde-breaks (`\\`) vervangen door lege regel
-    text = re.sub(r"\\{2}\s*", "\n\n", text)
+    def flush():
+        if paragraph:
+            text = "\n".join(paragraph)
+            text = re.sub(r"\\{2}[ \t]*(?:\n|$)", "\n\n", text)
+            text = re.sub(r"([^\n])\n(?!\n)", r"\1 ", text)
+            out.append(text)
+            paragraph.clear()
 
-    # 1) Zorg voor lege regel na property drawers
-    text = re.sub(r"(?m)^(:END:)\s*\n(?!\n)", r"\1\n\n", text)
-
-    # 2) Als een afsluitende ster op een eigen regel staat, verplaats deze terug achter de vraag
-    text = re.sub(r"(?m)^(\*[^*\n]+)\n\*([^\n].*)", r"\1*\n\n\2", text)
-    text = re.sub(r"(?m)^(\*[^*\n]+)\n\n\*([^\n].*)", r"\1*\n\n\2", text)
-    text = re.sub(r"(?m)^(\*[^*\n]+)\n\*\s*(\n+)", r"\1*\2", text)
-
-    # 3) Zachte regeleinden binnen alinea's samenvoegen, maar behoud headings/properties/tabellen
-    join_pat = re.compile(r"([^\n])\n(?!\n|[*+-] |\d+\. |#\+|:|> |\|)")
-    text = re.sub(join_pat, r"\1 ", text)
-
-    return text
+    for line in org_text.splitlines():
+        begin = re.match(r"^\s*#\+begin_", line, re.I)
+        end = re.match(r"^\s*#\+end_", line, re.I)
+        drawer = re.match(r"^\s*:[\w-]+:\s*$", line)
+        structural = re.match(r"^(?:\s|\*+\s|[-+]\s|\d+[.)]\s|\||#|:|>\s)", line)
+        if block_depth or in_drawer or begin or drawer or structural or not line.strip():
+            flush()
+            out.append(line)
+            if begin:
+                block_depth += 1
+            elif end and block_depth:
+                block_depth -= 1
+            if not block_depth and drawer:
+                in_drawer = line.strip().upper() != ":END:"
+        else:
+            paragraph.append(line)
+    flush()
+    return "\n".join(out) + ("\n" if org_text.endswith("\n") else "")
 
 
 def fill_wrap_org(org_text: str, width: int = 65) -> str:
@@ -286,10 +301,10 @@ def fill_wrap_org(org_text: str, width: int = 65) -> str:
 
         # Detect block boundaries we should not wrap
         is_heading = line.startswith("*")
-        is_list = re.match(r"^\s*([*-]|\d+\.)\s", line)
+        is_list = re.match(r"^\s*([*+-]|\d+[.)])\s", line)
         is_table = line.startswith("|")
-        is_block_begin = re.match(r"^\s*#\+(BEGIN|begin)", line)
-        is_block_end = re.match(r"^\s*#\+(END|end)", line)
+        is_block_begin = re.match(r"^\s*#\+begin_", line, re.I)
+        is_block_end = re.match(r"^\s*#\+end_", line, re.I)
         is_keyword = re.match(r"^\s*#\+", line)
         is_property_start = line.strip() == ":PROPERTIES:"
         is_property_end = line.strip() == ":END:"
@@ -321,7 +336,7 @@ def fill_wrap_org(org_text: str, width: int = 65) -> str:
             out.append(line)
             continue
 
-        if is_heading or is_list or is_table or is_keyword or in_block:
+        if is_heading or is_list or is_table or is_keyword or in_block or line[:1].isspace():
             flush_buffer()
             out.append(line)
             continue
@@ -385,15 +400,21 @@ def main():
     ap.add_argument("--no-fill", action="store_true",
                     help="Schakel tekst-wrapping (~fill-column~) rond 65 tekens uit")
     ap.add_argument("--debug", action="store_true", help="Extra logging naar stderr")
-    ap.add_argument("--format", choices=["org","markdown","typst","latex","docx"], default="org",
-                    help="Uitvoerformaat (default: org)")
+    ap.add_argument("--format", choices=["org","markdown","typst","latex","docx"], action="append",
+                    help="Uitvoerformaat; herhaal voor meerdere exports (default: org)")
     args = ap.parse_args()
+    formats = list(dict.fromkeys(args.format or ["org"]))
+    if args.append and formats != ["org"]:
+        ap.error("--append werkt alleen met --format org")
 
     url = args.url.strip()
     base = Path(args.dir).expanduser() if args.dir else Path.cwd()
     base.mkdir(parents=True, exist_ok=True)
 
     page_html = requests_get(url)
+    if not page_html.strip():
+        sys.stderr.write("[url2org] Geen webpagina opgehaald; er is niets opgeslagen.\n")
+        sys.exit(4)
 
     # ── 1) Trafilatura basis ──
     md, clean_html, raw_html = trafilatura_extract(url, page_html)
@@ -423,6 +444,10 @@ def main():
         if read_org.strip():
             org_body = read_org
 
+    if not org_body.strip():
+        sys.stderr.write("[url2org] Geen inhoud gevonden; er is niets opgeslagen.\n")
+        sys.exit(5)
+
     if org_body and not args.no_softfix:
         org_body = softbreak_fix_org(org_body)
 
@@ -448,54 +473,48 @@ def main():
         safe_title = sanitize_filename_component(title)
         fname = f"{safe_title} - {today}" if safe_title else today
     ext_map = {"org":"org", "markdown":"md", "typst":"typ", "latex":"tex", "docx":"docx"}
-    outpath = (base / f"{fname}.{ext_map[args.format]}")
-
     entry = build_entry(title, url, org_body)
 
     if args.append:
-        if args.format != "org":
-            sys.stderr.write("[url2org] --append werkt alleen met --format org.\n")
-            sys.exit(3)
         target = base / args.append
         if not target.exists():
             sys.stderr.write(f"[url2org] Bestand {target} bestaat niet.\n")
             sys.exit(3)
         with open(target, "a", encoding="utf-8") as f:
             f.write("\n" + entry)
-        out = target
+        outputs = [(target, "org")]
     else:
-        if args.format == "org":
+        outputs = []
+        for fmt in formats:
+            outpath = base / f"{fname}.{ext_map[fmt]}"
             i, stem = 2, outpath.stem
             while outpath.exists():
-                outpath = outpath.with_name(f"{stem}-{i}.org"); i += 1
-            outpath.write_text(entry, encoding="utf-8")
-            out = outpath
-        else:
-            # converteer de Org-entry naar gewenst formaat
-            out_bytes = pandoc_convert_text(entry, "org", args.format)
-            i, stem = 2, outpath.stem
-            while outpath.exists():
-                outpath = outpath.with_name(f"{stem}-{i}.{ext_map[args.format]}"); i += 1
-            if args.format == "docx":
-                with open(outpath, "wb") as f: f.write(out_bytes)
+                outpath = outpath.with_name(f"{stem}-{i}.{ext_map[fmt]}"); i += 1
+            if fmt == "org":
+                outpath.write_text(entry, encoding="utf-8")
             else:
-                text_out = out_bytes.decode("utf-8", "replace")
-                if args.format == "typst":
-                    header = "#set page(\"a5\")\n\n"
-                    body = text_out.lstrip()
-                    if body.startswith("#set page"):
-                        body_lines = body.splitlines()
-                        body = "\n".join(body_lines[1:]).lstrip("\n")
-                    text_out = header + body
-                outpath.write_text(text_out, encoding="utf-8")
-            out = outpath
+                out_bytes = pandoc_convert_text(entry, "org", fmt)
+                if fmt == "docx":
+                    outpath.write_bytes(out_bytes)
+                else:
+                    text_out = out_bytes.decode("utf-8", "replace")
+                    if fmt == "typst":
+                        header = "#set page(\"a5\")\n\n"
+                        body = text_out.lstrip()
+                        if body.startswith("#set page"):
+                            body_lines = body.splitlines()
+                            body = "\n".join(body_lines[1:]).lstrip("\n")
+                        text_out = header + body
+                    outpath.write_text(text_out, encoding="utf-8")
+            outputs.append((outpath, fmt))
 
-    print(str(out))
-    if args.open and args.format != "docx":
-        if have("emacsclient"):
-            subprocess.run(["emacsclient","-n",str(out)])
-        else:
-            sys.stderr.write("Tip: installeer emacsclient voor --open.\n")
+    for out, fmt in outputs:
+        print(str(out))
+        if args.open and fmt != "docx":
+            if have("emacsclient"):
+                subprocess.run(["emacsclient","-n",str(out)])
+            else:
+                sys.stderr.write("Tip: installeer emacsclient voor --open.\n")
 
 if __name__ == "__main__":
     main()

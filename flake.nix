@@ -48,7 +48,7 @@
               --set URL2ORG_BIN "${url2org}/bin/url2org" \
               --prefix PATH : ${pkgs.lib.makeBinPath [
                 pkgs.wofi pkgs.fd pkgs.findutils pkgs.wl-clipboard
-                pkgs.libnotify pkgs.coreutils pkgs.gnused pkgs.gawk pkgs.gnugrep
+                pkgs.libnotify pkgs.coreutils pkgs.gnused pkgs.gawk pkgs.gnugrep pkgs.xdg-user-dirs
               ]}
           '';
         };
@@ -77,12 +77,23 @@
           mimeTypes = [ "x-scheme-handler/url2org" ];
         };
 
+        captureDesktopItem = pkgs.makeDesktopItem {
+          name = "url2org-capture";
+          desktopName = "URL2Org Capture";
+          comment = "Webpagina opslaan als Org, Markdown, Typst, LaTeX of DOCX";
+          exec = "${wofi-cap-url2org}/bin/wofi-cap-url2org";
+          icon = "text-html";
+          terminal = false;
+          categories = [ "Utility" ];
+          keywords = [ "url2org" "URL" "Org" "Markdown" ];
+        };
+
       in {
         packages = {
-          inherit url2org wofi-cap-url2org url2org-proto desktopItem;
+          inherit url2org wofi-cap-url2org url2org-proto desktopItem captureDesktopItem;
           default = pkgs.symlinkJoin {
             name = "url2org-suite";
-            paths = [ url2org wofi-cap-url2org url2org-proto desktopItem ];
+            paths = [ url2org wofi-cap-url2org url2org-proto desktopItem captureDesktopItem ];
           };
         };
 

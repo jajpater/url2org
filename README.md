@@ -39,6 +39,10 @@ Add to your home-manager packages:
 
 All dependencies (Python packages, pandoc, wofi, etc.) are bundled automatically.
 
+The suite also installs **URL2Org Capture** in your application menu. Search for
+`url2org` or `Markdown` in rofi/wofi `drun` to open the interactive frontend.
+The separate, hidden desktop entry handles `url2org://` browser links.
+
 ## Commands
 
 | Command | Description |
@@ -61,6 +65,9 @@ url2org https://example.com --dir ~/Documents --format org
 # Available formats: org, markdown, typst, latex, docx
 url2org https://example.com --format markdown
 
+# Fetch and extract once, then export to multiple formats
+url2org https://example.com --format org --format markdown
+
 # Use Readability for cleaner extraction
 url2org https://example.com --readability
 
@@ -79,9 +86,13 @@ wofi-cap-url2org
 
 This opens a wofi menu where you can:
 1. Use clipboard URL or type manually
-2. Choose destination directory
+2. Choose a recent destination or your XDG Documents folder (`Documenten` on Dutch systems); choose “Zoek andere map” to search further, or type a new path
 3. Toggle options (--open, --snapshot, --readability)
 4. Select output format(s)
+
+Press Escape to cancel, including in the options menu. Choose **Klaar** to start
+the capture. Download/extraction failures show an error notification and do not
+create an empty article. Recent destinations are updated atomically after success.
 
 ### Browser Integration (Bookmarklets)
 
@@ -112,6 +123,12 @@ The flake automatically includes:
 
 ```bash
 nix develop  # Enter dev shell with all dependencies
+```
+
+Run the regression tests (Python standard library; Pandoc enables the export test):
+
+```bash
+python3 -m unittest discover -s tests -v
 ```
 
 ## Documentation

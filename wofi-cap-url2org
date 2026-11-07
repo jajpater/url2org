@@ -6,7 +6,12 @@ WOFI_BIN="${WOFI_BIN:-wofi}"
 FD_BIN="${FD_BIN:-fd}"                       # op Ubuntu vaak 'fdfind'
 URL2ORG_BIN="${URL2ORG_BIN:-url2org}"
 
-ROOTS=("$HOME/Documents/Aantekeningen/Org/web" "$HOME/Documents" "$HOME")
+DOCUMENTS_DIR="$(xdg-user-dir DOCUMENTS 2>/dev/null || true)"
+if [ -z "$DOCUMENTS_DIR" ]; then
+  DOCUMENTS_DIR="$HOME/Documenten"
+  [ ! -d "$HOME/Documents" ] || DOCUMENTS_DIR="$HOME/Documents"
+fi
+ROOTS=("$DOCUMENTS_DIR/Aantekeningen/Org/web" "$DOCUMENTS_DIR" "$HOME")
 HIDE_DOTDIRS=true
 
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/url2org"
@@ -18,11 +23,17 @@ PROMPT_DIR="Kies doelmap"
 PROMPT_FLAGS="Opties & formaat (Enter toggelt; kies KLAAR als je klaar bent)"
 # -----------------------------------
 
-die(){ echo "ERROR: $*" >&2; exit 1; }
+die(){
+  echo "ERROR: $*" >&2
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send --urgency=critical "url2org: mislukt" "$*" || true
+  fi
+  exit 1
+}
 need(){ command -v "$1" >/dev/null 2>&1 || die "$1 niet gevonden"; }
 
 need "$WOFI_BIN"
-[ -x "$URL2ORG_BIN" ] || die "url2org niet gevonden op $URL2ORG_BIN"
+need "$URL2ORG_BIN"
 
 # ----- wofi helper (geen markup i.v.m. & in paden) -----
 wofi_pick() {
@@ -66,7 +77,7 @@ fi
 
 printf '%s' "$URL" | is_url || die "Ongeldige URL (moet met http/https beginnen)."
 
-# ----- 2) Directories verzamelen -----
+# ----- 2) Recente mappen direct tonen; alleen op verzoek verder zoeken -----
 collect_dirs_fd() {
   local root="$1" bin="$FD_BIN"
   command -v "$bin" >/dev/null 2>&1 || bin="fdfind"
@@ -90,17 +101,21 @@ declare -a CANDS=()
 mapfile -t CANDS < <(sed '/^$/d' "$MRU_FILE" 2>/dev/null || true)
 for r in "${ROOTS[@]}"; do
   [ -d "$r" ] && CANDS+=("$r")
-  if mapfile -t TMP < <(collect_dirs_fd "$r"); then
-    CANDS+=("${TMP[@]}")
-  else
-    mapfile -t TMP < <(collect_dirs_find "$r")
-    CANDS+=("${TMP[@]}")
-  fi
 done
 mapfile -t CANDS < <(printf '%s\n' "${CANDS[@]}" | awk 'NF' | sed 's#//*#/#g' | awk '!seen[$0]++')
 
-CHOICE_DIR="$(printf '%s\n' "${CANDS[@]}" | wofi_pick "$PROMPT_DIR" || true)"
+SEARCH_OPTION="🔎 Zoek andere map"
+CHOICE_DIR="$(printf '%s\n' "${CANDS[@]}" "$SEARCH_OPTION" | wofi_pick "$PROMPT_DIR" || true)"
 [ -n "${CHOICE_DIR:-}" ] || { echo "Geannuleerd."; exit 130; }
+if [ "$CHOICE_DIR" = "$SEARCH_OPTION" ]; then
+  if DIRS="$(collect_dirs_fd "$HOME")"; then
+    :
+  else
+    DIRS="$(collect_dirs_find "$HOME")" || die "Mappen zoeken mislukt"
+  fi
+  CHOICE_DIR="$(printf '%s\n' "$HOME" "$DIRS" | wofi_pick "$PROMPT_DIR" || true)"
+  [ -n "${CHOICE_DIR:-}" ] || { echo "Geannuleerd."; exit 130; }
+fi
 [ -d "$CHOICE_DIR" ] || mkdir -p "$CHOICE_DIR"
 [ -w "$CHOICE_DIR" ] || die "Geen schrijfrechten in: $CHOICE_DIR"
 
@@ -139,7 +154,7 @@ toggle_format() {
 
 while :; do
   # Toon huidige status
-  SEL="$(printf '%s\n' \
+  if ! SEL="$(printf '%s\n' \
       'Klaar' \
       "$( [ $OPEN -eq 1 ] && echo '[x]' || echo '[ ]' ) --open" \
       "$( [ $SNAP -eq 1 ] && echo '[x]' || echo '[ ]' ) --snapshot" \
@@ -150,7 +165,10 @@ while :; do
       "$(format_option typst)" \
       "$(format_option latex)" \
       "$(format_option docx)" \
-    | wofi_pick "$PROMPT_FLAGS" || true)"
+    | wofi_pick "$PROMPT_FLAGS")"; then
+    echo "Geannuleerd."
+    exit 130
+  fi
   case "${SEL:-}" in
     "[x] --open"|"[ ] --open")         OPEN=$((1-OPEN)) ;;
     "[x] --snapshot"|"[ ] --snapshot")  SNAP=$((1-SNAP)) ;;
@@ -160,9 +178,10 @@ while :; do
     "[x] typst"|"[ ] typst")           toggle_format "typst" ;;
     "[x] latex"|"[ ] latex")           toggle_format "latex" ;;
     "[x] docx"|"[ ] docx")             toggle_format "docx" ;;
-    ""|"Klaar")                         break ;;
+    "Klaar")                            break ;;
+    "")                                 echo "Geannuleerd."; exit 130 ;;
     "---")                              : ;;
-    *)                                  break ;;
+    *)                                  : ;;
   esac
 done
 
@@ -176,28 +195,21 @@ EXTRA_FLAGS_BASE=()
 [ $SNAP -eq 1 ] && EXTRA_FLAGS_BASE+=(--snapshot)
 [ $READ -eq 1 ] && EXTRA_FLAGS_BASE+=(--readability)
 
-declare -a OUTPUTS=()
+ERROR_FILE="$(mktemp "$CACHE_DIR/error.XXXXXX")"
+MRU_TMP=""
+trap 'rm -f -- "$ERROR_FILE" "${MRU_TMP:-}"' EXIT
 
-# ----- 4) url2org draaien per gekozen formaat -----
+# ----- 4) Eén capture, exporteren naar alle gekozen formaten -----
+EXTRA_FLAGS=("${EXTRA_FLAGS_BASE[@]}")
 for FMT in "${FORMATS[@]}"; do
-  EXTRA_FLAGS=("${EXTRA_FLAGS_BASE[@]}")
   EXTRA_FLAGS+=(--format "$FMT")
-
-  if "$URL2ORG_BIN" --help 2>/dev/null | grep -q -- '--dir'; then
-    OUT="$("$URL2ORG_BIN" "$URL" --dir "$CHOICE_DIR" "${EXTRA_FLAGS[@]}")" || die "url2org faalde"
-    OUTPUTS+=("$OUT")
-    echo "$OUT"
-  else
-    CREATED="$("$URL2ORG_BIN" "$URL" "${EXTRA_FLAGS[@]}")" || die "url2org faalde"
-    if [ -n "${CREATED:-}" ] && [ -f "$CREATED" ]; then
-      BASENAME="$(basename -- "$CREATED")"
-      mv -f -- "$CREATED" "$CHOICE_DIR"/
-      OUT="$CHOICE_DIR/$BASENAME"
-      OUTPUTS+=("$OUT")
-      echo "Verplaatst naar: $CHOICE_DIR ($BASENAME)"
-    fi
-  fi
 done
+if ! OUT="$("$URL2ORG_BIN" "$URL" --dir "$CHOICE_DIR" "${EXTRA_FLAGS[@]}" 2>"$ERROR_FILE")"; then
+  die "url2org faalde: $(cat "$ERROR_FILE")"
+fi
+[ -n "$OUT" ] || die "url2org gaf geen opgeslagen bestanden terug"
+mapfile -t OUTPUTS <<< "$OUT"
+printf '%s\n' "${OUTPUTS[@]}"
 
 # Desktopnotificatie bij succes (optioneel)
 if command -v notify-send >/dev/null 2>&1; then
@@ -212,4 +224,6 @@ if command -v notify-send >/dev/null 2>&1; then
 fi
 
 # MRU bijwerken (prepend, dedup, limit)
-printf '%s\n' "$CHOICE_DIR" | cat - "$MRU_FILE" | awk 'NF' | awk '!seen[$0]++' | head -n 200 > "$MRU_FILE"
+MRU_TMP="$(mktemp "$CACHE_DIR/dirs.XXXXXX")"
+{ printf '%s\n' "$CHOICE_DIR"; cat "$MRU_FILE"; } | awk 'NF && !seen[$0]++ && ++n <= 200' > "$MRU_TMP"
+mv -- "$MRU_TMP" "$MRU_FILE"
